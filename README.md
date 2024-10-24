@@ -1,7 +1,8 @@
 
-# Flask Model API
+# HUK Coburg Technical Challenge
 
-This project is a Flask-based REST API for making inference calls to a machine learning model predicting marketing affinity of HUK Coburg customers. The API allows clients to send POST requests with customer data, and it responds with a prediction classifying if a customer will be interested in an offer from HUK Coburg (0 = not interested / 1 = interested).
+This project is a Flask-based REST API for making inference calls to a machine learning model predicting marketing affinity of HUK Coburg customers.
+The API allows clients to send POST requests with customer data, and it responds with a prediction classifying if a customer will be interested in an offer from HUK Coburg (0 = not interested / 1 = interested).
 
 ## Features
 
