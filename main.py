@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 import category_encoders as ce
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.ensemble import RandomForestClassifier
 from tqdm import tqdm
@@ -103,7 +103,6 @@ def preprocess_data(data):
 
 
 def calculate_scale_pos_weight(data):
-    # Calculate scale_pos_weight
     neg, pos = data.value_counts()
     scale_pos_weight = neg / pos
     return scale_pos_weight
@@ -114,7 +113,10 @@ def train(data, model_name):
                   "Alter_Fzg", "Vorschaden", "Jahresbeitrag", "Altersgruppen"])
     y = data["Interesse"]
 
-    target_encoder = ce.TargetEncoder(cols=['Regional_Code', 'Vertriebskanal'])
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42)
+    target_encoding_cols = ['Regional_Code', 'Vertriebskanal']
+    target_encoder = ce.TargetEncoder(cols=target_encoding_cols)
 
     strat_kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
@@ -122,21 +124,23 @@ def train(data, model_name):
     f1_scores = []
     precision_scores = []
     recall_scores = []
-    for train_idx, valid_idx in tqdm(strat_kfold.split(X, y)):
-        X_train, X_valid = X.iloc[train_idx], X.iloc[valid_idx]
-        y_train, y_valid = y.iloc[train_idx], y.iloc[valid_idx]
 
-        # Apply target encoding to the training set
-        X_train_encoded = target_encoder.fit_transform(X_train, y_train)
+    for train_idx, val_idx in tqdm(strat_kfold.split(X_train, y_train)):
+        X_train_fold, X_val_fold = X_train.iloc[train_idx].copy(
+        ), X_train.iloc[val_idx].copy()
+        y_train_fold, y_val_fold = y_train.iloc[train_idx], y_train.iloc[val_idx]
 
-        # Apply the same encoding to the validation set (using the learned mappings from training)
-        X_valid_encoded = target_encoder.transform(X_valid)
+        X_train_fold.loc[:, target_encoding_cols] = target_encoder.fit_transform(
+            X_train_fold[target_encoding_cols], y_train_fold)
 
-        # Handle unseen categories: Replace with global mean of the target in the training set
-        global_mean = y_train.mean()
-        X_valid_encoded = X_valid_encoded.fillna(global_mean)
+        X_val_fold.loc[:, target_encoding_cols] = target_encoder.transform(
+            X_val_fold[target_encoding_cols])
 
-        scale_pos_weight = calculate_scale_pos_weight(y_train)
+        overall_mean = y_train_fold.mean()
+        X_val_fold.loc[:, target_encoding_cols] = X_val_fold[target_encoding_cols].fillna(
+            overall_mean)
+
+        scale_pos_weight = calculate_scale_pos_weight(y_train_fold)
 
         if model_name == "rf":
             # Random Forest Classifier
@@ -151,21 +155,71 @@ def train(data, model_name):
             # XGBoost Classifier
             model = XGBClassifier(
                 random_state=42, scale_pos_weight=scale_pos_weight)
-        print(X_train_encoded.columns.tolist())
-        model.fit(X_train_encoded, y_train)
 
-        y_pred = model.predict(X_valid_encoded)
+        model.fit(X_train_fold, y_train_fold)
+        y_val_pred = model.predict(X_val_fold)
 
-        accuracy_scores.append(accuracy_score(y_valid, y_pred))
-        f1_scores.append(f1_score(y_valid, y_pred))
-        precision_scores.append(precision_score(y_valid, y_pred))
-        recall_scores.append(recall_score(y_valid, y_pred))
+        accuracy_scores.append(accuracy_score(y_val_fold, y_val_pred))
+        precision_scores.append(precision_score(
+            y_val_fold, y_val_pred, zero_division=1))
+        recall_scores.append(recall_score(
+            y_val_fold, y_val_pred, zero_division=1))
+        f1_scores.append(f1_score(y_val_fold, y_val_pred, zero_division=1))
 
-    print(f'Average Accuracy: {np.mean(accuracy_scores)}')
-    print(f'Average F1-Score: {np.mean(f1_scores)}')
-    print(f'Average Precision: {np.mean(precision_scores)}')
-    print(f'Average Recall: {np.mean(recall_scores)}')
-    return model
+    print(
+        f'cross-validation Accuracies: {[round(float(el), 4) for el in accuracy_scores]}')
+    print(
+        f'cross-validation F1-Scores: {[round(float(el), 4) for el in f1_scores]}')
+    print(
+        f'cross-validation Precisions: {[round(float(el), 4) for el in precision_scores]}')
+    print(
+        f'cross-validation Recalls: {[round(float(el), 4) for el in recall_scores]}')
+
+    print(f'Average cross-validation Accuracy: {np.mean(accuracy_scores)}')
+    print(f'Average cross-validation F1-Score: {np.mean(f1_scores)}')
+    print(f'Average cross-validation Precision: {np.mean(precision_scores)}')
+    print(f'Average cross-validation Recall: {np.mean(recall_scores)}')
+
+    X_train.loc[:, target_encoding_cols] = target_encoder.fit_transform(
+        X_train[target_encoding_cols], y_train)
+
+    scale_pos_weight = calculate_scale_pos_weight(y_train)
+
+    if model_name == "rf":
+        # Random Forest Classifier
+        final_model = RandomForestClassifier(
+            random_state=42, class_weight='balanced')
+
+    elif model_name == "lgbm":
+        # LightGBM Classifier
+        final_model = lgb.LGBMClassifier(
+            random_state=42, scale_pos_weight=scale_pos_weight, n_estimators=70)
+    elif model_name == "xgb":
+        # XGBoost Classifier
+        final_model = XGBClassifier(
+            random_state=42, scale_pos_weight=scale_pos_weight)
+
+    final_model.fit(X_train, y_train)
+
+    X_test.loc[:, target_encoding_cols] = target_encoder.transform(
+        X_test[target_encoding_cols])
+
+    overall_mean = y_train.mean()
+    X_test.loc[:, target_encoding_cols] = X_test[target_encoding_cols].fillna(
+        overall_mean)
+
+    y_test_pred = final_model.predict(X_test)
+
+    test_accuracy = accuracy_score(y_test, y_test_pred)
+    test_precision = precision_score(y_test, y_test_pred, zero_division=1)
+    test_recall = recall_score(y_test, y_test_pred, zero_division=1)
+    test_f1 = f1_score(y_test, y_test_pred, zero_division=1)
+
+    print(f"Final model Accuracy on hold-out test set: {test_accuracy:.4f}")
+    print(f"Final model F1 score on hold-out test set: {test_f1:.4f}")
+    print(f"Final model Precision on hold-out test set: {test_precision:.4f}")
+    print(f"Final model Recall on hold-out test set: {test_recall:.4f}")
+    return final_model
 
 
 def save_model(model, model_name):
