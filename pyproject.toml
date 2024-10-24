@@ -17,6 +17,7 @@ category-encoders = "^2.6.4"
 xgboost = "^2.1.2"
 lightgbm = "^4.5.0"
 flask = "^3.0.3"
+tqdm = "^4.66.5"
 
 
 [tool.poetry.group.dev.dependencies]
