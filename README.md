@@ -56,7 +56,7 @@ You can test the API by sending a POST request with the required features using 
 #### Example `curl` Request
 
 ```bash
-curl -X POST http://localhost:5000/predict -H "Content-Type: application/json" -d '{
+curl -X POST http://localhost:8080/predict -H "Content-Type: application/json" -d '{
   "id": [107727],
   "Geschlecht": ["Male"],
   "Alter": [42],
