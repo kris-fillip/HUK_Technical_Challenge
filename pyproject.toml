@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "huk-technical-challenge"
+version = "0.1.0"
+description = "Implementation for the HUK Technical Challenge"
+authors = ["kris-fillip <krisfillip@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.11"
+pandas = "^2.2.3"
+matplotlib = "^3.9.2"
+seaborn = "^0.13.2"
+scikit-learn = "^1.5.2"
+category-encoders = "^2.6.4"
+xgboost = "^2.1.2"
+lightgbm = "^4.5.0"
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
